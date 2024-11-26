@@ -6,7 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.* // Import layout components
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // Function to fetch suggestions from Hugging Face API
-suspend fun fetchHuggingFaceNextWords(
+suspend fun fetchNextWord(
     inputText: String,
     suggestions: MutableState<List<String>>
 ) {
@@ -43,14 +43,12 @@ suspend fun fetchHuggingFaceNextWords(
     }
 
     val service = HuggingFaceRetrofitInstance.api
-    // Prompt to generate the next 2-3 words
-    val prompt = "The next 2-3 words after \"$inputText\" are:"
     val request = HuggingFaceRequest(
-        inputs = prompt,
+        inputs = inputText,
         parameters = mapOf(
-            "max_length" to 15,         // Allow space for 2-3 words
-            "temperature" to 0.5,      // Balance creativity and determinism
-            "num_return_sequences" to 1 // Single response
+            "max_length" to 1,       // Limit to 1 token (one word)
+            "temperature" to 0.1,    // Low temperature for determinism
+            "return_full_text" to false // Focus only on the continuation
         )
     )
 
@@ -58,29 +56,24 @@ suspend fun fetchHuggingFaceNextWords(
         val response = withContext(Dispatchers.IO) {
             service.getSuggestions(request)
         }
-        // Log the raw response for debugging
+
+        // Log raw response for debugging
         Log.d("HuggingFaceResponse", "Raw Response: $response")
 
-        // Extract and process the next 2-3 words
-        val rawText = response.firstOrNull()?.generated_text?.trim() ?: ""
-        val nextWords = rawText
-            .replace(prompt, "")  // Remove the prompt from the response
-            .trim()               // Clean up whitespace
-            .split(" ")           // Split the generated text into words
-            .take(3)              // Limit to 2-3 words
-            .joinToString(" ")    // Rejoin as a single string
+        // Extract the first word from the response
+        val nextWord = response.firstOrNull()?.generated_text?.trim()?.split(" ")?.firstOrNull() ?: ""
 
-        // Update suggestions with the predicted words
-        suggestions.value = if (nextWords.isNotBlank()) listOf(nextWords) else emptyList()
+        // Update suggestions with the single predicted word
+        suggestions.value = if (nextWord.isNotBlank()) listOf(nextWord) else emptyList()
 
     } catch (e: retrofit2.HttpException) {
         val errorBody = e.response()?.errorBody()?.string()
-        Log.e("fetchHuggingFaceNextWords", "HTTP Error: ${e.code()}, Body: $errorBody")
+        Log.e("fetchNextWord", "HTTP Error: ${e.code()}, Body: $errorBody")
         suggestions.value = listOf("HTTP Error: ${e.code()} - $errorBody")
     } catch (e: Exception) {
-        Log.e("fetchHuggingFaceNextWords", "General Error: ${e.message}")
+        Log.e("fetchNextWord", "General Error: ${e.message}")
         e.printStackTrace()
-        suggestions.value = listOf("Error fetching next words")
+        suggestions.value = listOf("Error fetching next word")
     }
 }
 
@@ -98,9 +91,9 @@ fun PredictiveTextAppScreen() {
             onValueChange = { newText ->
                 textState.value = newText
 
-                // Fetch next words dynamically for the input text
+                // Fetch next word dynamically
                 coroutineScope.launch {
-                    fetchHuggingFaceNextWords(newText, suggestions)
+                    fetchNextWord(newText, suggestions)
                 }
             },
             label = { Text("Type something...") }
@@ -116,7 +109,7 @@ fun PredictiveTextAppScreen() {
                         .padding(4.dp)
                         .background(Color.LightGray)
                         .clickable {
-                            // Append the predicted words to the text field
+                            // Append the predicted word to the text field
                             textState.value = if (textState.value.isBlank()) {
                                 suggestion
                             } else {
@@ -130,3 +123,4 @@ fun PredictiveTextAppScreen() {
         }
     }
 }
+
