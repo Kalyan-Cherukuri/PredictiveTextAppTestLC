@@ -1,4 +1,4 @@
-// OpenAIService.kt
+/*// OpenAIService.kt
 
 package com.example.predictivetextapptestlc // Ensure this matches your project package
 
@@ -32,3 +32,4 @@ object RetrofitInstance {
             .create(OpenAIService::class.java)
     }
 }
+*/

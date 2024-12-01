@@ -8,24 +8,20 @@ import retrofit2.http.POST
 data class HuggingFaceRequest(
     val inputs: String, // User input text
     val parameters: Map<String, Any> = mapOf(
-        "max_length" to 1,      // Limit to 1 token (one word)
-        "temperature" to 0,   // Low temperature for deterministic output
-        "return_full_text" to false // Generate only the continuation
+        "max_length" to 10, // Number of tokens to generate
+        "temperature" to 0.5 // Randomness level
     )
 )
 
+// Response body from Hugging Face API
+data class HuggingFaceResponse(val generated_text: String)
 
-// Response body for Hugging Face API
-data class HuggingFaceResponse(
-    val generated_text: String // Predicted text from the API
-)
-
-// Retrofit interface for the Hugging Face API
+// Retrofit interface for Hugging Face API
 interface HuggingFaceService {
     @Headers(
-        "Authorization: Bearer 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", // Replace YOUR_API_KEY with your actual Hugging Face token
+        "Authorization: Bearer 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", // Replace with your Hugging Face API key
         "Content-Type: application/json"
     )
-    @POST("https://api-inference.huggingface.co/models/gpt2") // Replace "gpt2" with your desired model (e.g., "tiiuae/falcon-7b")
+    @POST("https://api-inference.huggingface.co/models/gpt2") // Use a Hugging Face model endpoint
     suspend fun getSuggestions(@Body request: HuggingFaceRequest): List<HuggingFaceResponse>
 }

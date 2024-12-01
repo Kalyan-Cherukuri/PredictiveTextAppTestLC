@@ -6,7 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.* // Import layout components
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -32,52 +32,58 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Function to fetch suggestions from Hugging Face API
-suspend fun fetchNextWord(
+// Fetch Suggestions from Local Dictionary
+fun getDictionarySuggestions(input: String, dictionary: List<String>): List<String> {
+    return if (input.isBlank()) {
+        emptyList()
+    } else {
+        dictionary.filter { it.startsWith(input, ignoreCase = true) }.take(5)
+    }
+}
+
+// Fetch Hybrid Suggestions (Dictionary + Hugging Face)
+suspend fun fetchHybridSuggestions(
     inputText: String,
-    suggestions: MutableState<List<String>>
+    suggestions: MutableState<List<String>>,
+    dictionary: List<String>
 ) {
     if (inputText.isBlank()) {
         suggestions.value = emptyList()
         return
     }
 
-    val service = HuggingFaceRetrofitInstance.api
-    val request = HuggingFaceRequest(
-        inputs = inputText,
-        parameters = mapOf(
-            "max_length" to 1,       // Limit to 1 token (one word)
-            "temperature" to 0.1,    // Low temperature for determinism
-            "return_full_text" to false // Focus only on the continuation
-        )
-    )
+    // Fetch suggestions from the local dictionary
+    val localSuggestions = getDictionarySuggestions(inputText, dictionary)
 
     try {
+        // Fetch suggestions from Hugging Face API
+        val service = HuggingFaceRetrofitInstance.api
+        val request = HuggingFaceRequest(
+            inputs = inputText,
+            parameters = mapOf(
+                "max_length" to 5, // Number of tokens to generate
+                "temperature" to 0.5 // Randomness
+            )
+        )
+
         val response = withContext(Dispatchers.IO) {
             service.getSuggestions(request)
         }
 
-        // Log raw response for debugging
-        Log.d("HuggingFaceResponse", "Raw Response: $response")
+        // Extract API suggestions
+        val apiSuggestions = response.firstOrNull()?.generated_text
+            ?.split(" ") // Split API response into words
+            ?.filter { it.isNotBlank() }
+            ?.take(5) ?: emptyList()
 
-        // Extract the first word from the response
-        val nextWord = response.firstOrNull()?.generated_text?.trim()?.split(" ")?.firstOrNull() ?: ""
+        // Combine and prioritize suggestions
+        suggestions.value = (localSuggestions + apiSuggestions).distinct()
 
-        // Update suggestions with the single predicted word
-        suggestions.value = if (nextWord.isNotBlank()) listOf(nextWord) else emptyList()
-
-    } catch (e: retrofit2.HttpException) {
-        val errorBody = e.response()?.errorBody()?.string()
-        Log.e("fetchNextWord", "HTTP Error: ${e.code()}, Body: $errorBody")
-        suggestions.value = listOf("HTTP Error: ${e.code()} - $errorBody")
     } catch (e: Exception) {
-        Log.e("fetchNextWord", "General Error: ${e.message}")
-        e.printStackTrace()
-        suggestions.value = listOf("Error fetching next word")
+        Log.e("fetchHybridSuggestions", "Error fetching API suggestions: ${e.message}")
+        suggestions.value = localSuggestions // Fallback to local suggestions
     }
 }
-
-
 
 @Composable
 fun PredictiveTextAppScreen() {
@@ -85,15 +91,67 @@ fun PredictiveTextAppScreen() {
     val suggestions = remember { mutableStateOf(listOf<String>()) }
     val coroutineScope = rememberCoroutineScope()
 
+    // Example dictionary
+    val dictionary = listOf(
+        // Greetings and Common Phrases
+        "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
+        "how are you?", "nice to meet you", "thank you", "thanks", "please", "sorry", "excuse me",
+
+        // Questions and Interrogatives
+        "who", "what", "where", "when", "why", "how", "which", "can", "could", "would", "should",
+        "do", "does", "is", "are", "was", "were",
+
+        // Affirmative and Negative Responses
+        "yes", "no", "maybe", "of course", "definitely", "absolutely", "no problem", "not really",
+        "I don’t know", "I think so", "I hope so", "sure", "okay", "alright",
+
+        // Connecting Words and Fillers
+        "and", "but", "or", "because", "so", "therefore", "although", "however", "in addition",
+        "moreover", "besides", "actually", "basically", "just", "anyway",
+
+        // Common Verbs
+        "be", "have", "do", "say", "get", "make", "go", "know", "think", "take", "see", "come",
+        "want", "use", "find", "give", "tell", "work", "call", "feel", "try", "leave", "put",
+        "mean", "keep",
+
+        // Adjectives for Common Expressions
+        "good", "great", "amazing", "wonderful", "beautiful", "excellent", "bad", "sad", "happy",
+        "excited", "boring", "interesting", "fun", "hard", "easy", "important", "quick", "fast",
+        "slow", "new", "old",
+
+        // Time-Related Words and Phrases
+        "today", "tomorrow", "yesterday", "now", "later", "soon", "last week", "next week",
+        "this week", "weekend", "morning", "afternoon", "evening", "night", "day", "year", "month",
+
+        // Places and Locations
+        "home", "office", "work", "school", "university", "library", "park", "restaurant", "cafe",
+        "airport", "hotel", "mall", "beach", "gym", "hospital", "city", "country",
+
+        // Frequently Used Nouns
+        "time", "people", "person", "place", "thing", "problem", "solution", "idea", "experience",
+        "story", "question", "answer", "information", "news", "friend", "family", "child", "work",
+        "job", "money", "love", "life",
+
+        // Numbers and Quantifiers
+        "one", "two", "three", "four", "five", "many", "few", "some", "a lot", "several", "all",
+        "none", "half", "most", "less", "more", "enough",
+
+        // Expressions of Politeness and Emotion
+        "please", "thank you", "sorry", "excuse me", "congratulations", "well done", "best wishes",
+        "good luck", "happy birthday", "take care", "I miss you", "I love you", "I’m proud of you",
+        "good job", "have fun", "stay safe", "see you soon"
+    )
+
+
     Column(modifier = Modifier.padding(16.dp)) {
         TextField(
             value = textState.value,
             onValueChange = { newText ->
                 textState.value = newText
 
-                // Fetch next word dynamically
+                // Fetch hybrid suggestions dynamically
                 coroutineScope.launch {
-                    fetchNextWord(newText, suggestions)
+                    fetchHybridSuggestions(newText, suggestions, dictionary)
                 }
             },
             label = { Text("Type something...") }
@@ -109,7 +167,6 @@ fun PredictiveTextAppScreen() {
                         .padding(4.dp)
                         .background(Color.LightGray)
                         .clickable {
-                            // Append the predicted word to the text field
                             textState.value = if (textState.value.isBlank()) {
                                 suggestion
                             } else {
@@ -123,4 +180,3 @@ fun PredictiveTextAppScreen() {
         }
     }
 }
-
