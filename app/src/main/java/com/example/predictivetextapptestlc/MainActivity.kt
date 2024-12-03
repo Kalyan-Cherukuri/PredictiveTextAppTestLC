@@ -107,7 +107,7 @@ fun PredictiveTextAppScreen() {
 
         // Connecting Words and Fillers
         "and", "but", "or", "because", "so", "therefore", "although", "however", "in addition",
-        "moreover", "besides", "actually", "basically", "just", "anyway",
+        "moreover", "besides", "actually", "basically", "just", "anyway", "again",
 
         // Common Verbs
         "be", "have", "do", "say", "get", "make", "go", "know", "think", "take", "see", "come",
